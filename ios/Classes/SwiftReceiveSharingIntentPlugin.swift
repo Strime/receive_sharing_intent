@@ -43,6 +43,7 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
         case "reset":
             self.initialMedia = nil
             self.latestMedia = nil
+            clearSharedData()
             result(nil)
         default:
             result(FlutterMethodNotImplemented)
@@ -254,7 +255,17 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
         }
         return true
     }
-    
+
+    private func clearSharedData() {
+        let appGroupId = Bundle.main.object(forInfoDictionaryKey: kAppGroupIdKey) as? String
+        let defaultGroupId = "group.\(Bundle.main.bundleIdentifier!)"
+        let userDefaults = UserDefaults(suiteName: appGroupId ?? defaultGroupId)
+
+        log("Clearing shared data from UserDefaults")
+        userDefaults?.removeObject(forKey: kUserDefaultsKey)
+        userDefaults?.removeObject(forKey: kUserDefaultsMessageKey)
+        userDefaults?.synchronize()
+    }
     
     public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         eventSinkMedia = events
