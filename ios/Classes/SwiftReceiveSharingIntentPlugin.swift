@@ -61,9 +61,11 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
     // them from getting the chance to.
     // Reference: https://developer.apple.com/documentation/uikit/uiapplicationdelegate/1622921-application
     public func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [AnyHashable : Any] = [:]) -> Bool {
+        var handled = false
+
         if let url = launchOptions[UIApplication.LaunchOptionsKey.url] as? URL {
             if (hasMatchingSchemePrefix(url: url)) {
-                return handleUrl(url: url, setInitialData: true)
+                handled = handleUrl(url: url, setInitialData: true)
             }
             return true
         } else if let activityDictionary = launchOptions[UIApplication.LaunchOptionsKey.userActivityDictionary] as? [AnyHashable: Any] {
@@ -72,14 +74,64 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
                 if let userActivity = activityDictionary[key] as? NSUserActivity {
                     if let url = userActivity.webpageURL {
                         if (hasMatchingSchemePrefix(url: url)) {
-                            return handleUrl(url: url, setInitialData: true)
+                            handled = handleUrl(url: url, setInitialData: true)
+                            break
                         }
-                        return true
                     }
                 }
             }
         }
+        // Si aucune URL n'a été traitée ou si aucune URL n'était présente
+        // Vérifions les UserDefaults de toute façon pour récupérer les médias partagés
+        if !handled {
+            log("No URL handled, checking for shared media anyway")
+            checkForSharedMedia()
+        }
+        
         return true
+    }
+    
+    private func checkForSharedMedia() {
+        let appGroupId = Bundle.main.object(forInfoDictionaryKey: kAppGroupIdKey) as? String
+        let defaultGroupId = "group.\(Bundle.main.bundleIdentifier!)"
+        let userDefaults = UserDefaults(suiteName: appGroupId ?? defaultGroupId)
+                
+        let message = userDefaults?.string(forKey: kUserDefaultsMessageKey)
+        if let json = userDefaults?.object(forKey: kUserDefaultsKey) as? Data {
+            
+            do {
+                let sharedArray = decode(data: json)
+                let sharedMediaFiles: [SharedMediaFile] = sharedArray.compactMap {
+                    guard let path = $0.type == .text || $0.type == .url ? $0.path
+                            : getAbsolutePath(for: $0.path) else {
+                        log("Failed to get absolute path for: \($0.path)")
+                        return nil
+                    }
+                    
+                    
+                    return SharedMediaFile(
+                        path: path,
+                        mimeType: $0.mimeType,
+                        thumbnail: getAbsolutePath(for: $0.thumbnail),
+                        duration: $0.duration,
+                        message: message,
+                        type: $0.type
+                    )
+                }
+                
+                log("Processed shared media files count: \(sharedMediaFiles.count)")
+                latestMedia = sharedMediaFiles
+                initialMedia = latestMedia
+                
+                if let eventSink = eventSinkMedia {
+                    eventSink(toJson(data: latestMedia))
+                }
+            } catch {
+                log("Error processing shared media: \(error.localizedDescription)")
+            }
+        } else {
+            log("No shared data found in UserDefaults for key: \(kUserDefaultsKey)")
+        }
     }
     
     // This is the function called on resuming the app from a shared link.
@@ -200,16 +252,20 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
         let json = String(data: encodedData!, encoding: .utf8)!
         return json
     }
+    
+    private func log(_ message: String) {
+        print("[ReceiveSharingIntent] \(message)")  // Pour la console de débogage
+    }
 }
 
 
 public class SharedMediaFile: Codable {
-    var path: String
-    var mimeType: String?
-    var thumbnail: String? // video thumbnail
-    var duration: Double? // video duration in milliseconds
-    var message: String? // post message
-    var type: SharedMediaType
+    public var path: String
+    public var mimeType: String?
+    public var thumbnail: String? // video thumbnail
+    public var duration: Double? // video duration in milliseconds
+    public var message: String? // post message
+    public var type: SharedMediaType
     
     
     public init(
