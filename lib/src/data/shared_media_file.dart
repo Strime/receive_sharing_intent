@@ -9,7 +9,7 @@ class SharedMediaFile {
   final String? thumbnail;
 
   /// Video duration in milliseconds
-  final int? duration;
+  final double? duration;
 
   /// Shared media type
   final SharedMediaType type;
