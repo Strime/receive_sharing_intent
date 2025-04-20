@@ -27,6 +27,22 @@ class ReceiveSharingIntentMobile extends ReceiveSharingIntent {
   }
 
   @override
+  Future<List<SharedMediaFile>> refreshAndGetSharedMedia() async {
+    try {
+      final json = await mChannel.invokeMethod('readMedia');
+      if (json == null) return [];
+      final encoded = jsonDecode(json);
+      return encoded
+          .map<SharedMediaFile>((file) => SharedMediaFile.fromMap(file))
+          .toList();
+    } catch (e) {
+      print('Error calling readMedia: $e');
+      return [];
+    }
+  }
+
+
+  @override
   Stream<List<SharedMediaFile>> getMediaStream() {
     if (_streamMedia == null) {
       final stream = eChannelMedia.receiveBroadcastStream().cast<String?>();

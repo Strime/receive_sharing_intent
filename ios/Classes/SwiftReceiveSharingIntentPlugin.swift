@@ -36,12 +36,74 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
         switch call.method {
         case "getInitialMedia":
             result(toJson(data: self.initialMedia))
+        case "readMedia":
+            log("readMedia manually called from Flutter")
+            readMedia()
+            result(toJson(data: self.latestMedia))
         case "reset":
             self.initialMedia = nil
             self.latestMedia = nil
             result(nil)
         default:
             result(FlutterMethodNotImplemented)
+        }
+    }
+
+    private func readMedia() -> Bool {
+        let appGroupId = Bundle.main.object(forInfoDictionaryKey: kAppGroupIdKey) as? String
+        let defaultGroupId = "group.\(Bundle.main.bundleIdentifier!)"
+        let userDefaults = UserDefaults(suiteName: appGroupId ?? defaultGroupId)
+
+        log("Reading shared media from UserDefaults")
+        log("Using app group ID: \(appGroupId ?? defaultGroupId)")
+
+        let message = userDefaults?.string(forKey: kUserDefaultsMessageKey)
+        log("Message from UserDefaults: \(message ?? "nil")")
+
+        if let json = userDefaults?.object(forKey: kUserDefaultsKey) as? Data {
+            log("Found shared data in UserDefaults")
+
+            do {
+                let sharedArray = decode(data: json)
+                log("Decoded shared array count: \(sharedArray.count)")
+
+                let sharedMediaFiles: [SharedMediaFile] = sharedArray.compactMap {
+                    guard let path = $0.type == .text || $0.type == .url ? $0.path
+                            : getAbsolutePath(for: $0.path) else {
+                        log("Failed to get absolute path for: \($0.path)")
+                        return nil
+                    }
+
+                    log("Processing shared media: type=\($0.type.rawValue), path=\(path)")
+
+                    return SharedMediaFile(
+                        path: path,
+                        mimeType: $0.mimeType,
+                        thumbnail: getAbsolutePath(for: $0.thumbnail),
+                        duration: $0.duration,
+                        message: message,
+                        type: $0.type
+                    )
+                }
+
+                log("Processed shared media files count: \(sharedMediaFiles.count)")
+                latestMedia = sharedMediaFiles
+
+                if let eventSink = eventSinkMedia {
+                    log("Sending to eventSink")
+                    eventSink(toJson(data: latestMedia))
+                } else {
+                    log("Warning: eventSinkMedia is nil, cannot send data")
+                }
+
+                return true
+            } catch {
+                log("Error processing shared media: \(error.localizedDescription)")
+                return false
+            }
+        } else {
+            log("No shared data found in UserDefaults for key: \(kUserDefaultsKey)")
+            return false
         }
     }
     

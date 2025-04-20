@@ -37,6 +37,9 @@ abstract class ReceiveSharingIntent extends PlatformInterface {
   Future<List<SharedMediaFile>> getInitialMedia() {
     throw UnimplementedError('getInitialMedia() has not been implemented.');
   }
+  Future<List<SharedMediaFile>> refreshAndGetSharedMedia() {
+    throw UnimplementedError('refreshAndGetSharedMedia() has not been implemented.');
+  }
 
   /// Sets up a broadcast stream for receiving incoming media share change events.
   ///
