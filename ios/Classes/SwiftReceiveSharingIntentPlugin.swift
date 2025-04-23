@@ -37,7 +37,6 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
         case "getInitialMedia":
             result(toJson(data: self.initialMedia))
         case "readMedia":
-            log("readMedia manually called from Flutter")
             readMedia()
             result(toJson(data: self.latestMedia))
         case "reset":
@@ -55,55 +54,43 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
         let defaultGroupId = "group.\(Bundle.main.bundleIdentifier!)"
         let userDefaults = UserDefaults(suiteName: appGroupId ?? defaultGroupId)
 
-        log("Reading shared media from UserDefaults")
-        log("Using app group ID: \(appGroupId ?? defaultGroupId)")
-
         let message = userDefaults?.string(forKey: kUserDefaultsMessageKey)
-        log("Message from UserDefaults: \(message ?? "nil")")
 
         if let json = userDefaults?.object(forKey: kUserDefaultsKey) as? Data {
-            log("Found shared data in UserDefaults")
-
             do {
                 let sharedArray = decode(data: json)
-                log("Decoded shared array count: \(sharedArray.count)")
 
-                let sharedMediaFiles: [SharedMediaFile] = sharedArray.compactMap {
-                    guard let path = $0.type == .text || $0.type == .url ? $0.path
-                            : getAbsolutePath(for: $0.path) else {
-                        log("Failed to get absolute path for: \($0.path)")
-                        return nil
+                let sharedMediaFiles: [SharedMediaFile] = sharedArray.compactMap { item -> SharedMediaFile? in
+                    let path: String?
+                    if item.type == .text || item.type == .url {
+                        path = item.path
+                    } else {
+                        path = getAbsolutePath(for: item.path)
                     }
-
-                    log("Processing shared media: type=\($0.type.rawValue), path=\(path)")
-
+                    
+                    guard let validPath = path else { return nil }
+                    
                     return SharedMediaFile(
-                        path: path,
-                        mimeType: $0.mimeType,
-                        thumbnail: getAbsolutePath(for: $0.thumbnail),
-                        duration: $0.duration,
-                        message: message,
-                        type: $0.type
+                        path: validPath,
+                        mimeType: item.mimeType,
+                        thumbnail: getAbsolutePath(for: item.thumbnail),
+                        description: message,
+                        duration: item.duration,
+                        type: item.type
                     )
                 }
 
-                log("Processed shared media files count: \(sharedMediaFiles.count)")
                 latestMedia = sharedMediaFiles
 
                 if let eventSink = eventSinkMedia {
-                    log("Sending to eventSink")
                     eventSink(toJson(data: latestMedia))
-                } else {
-                    log("Warning: eventSinkMedia is nil, cannot send data")
                 }
 
                 return true
             } catch {
-                log("Error processing shared media: \(error.localizedDescription)")
                 return false
             }
         } else {
-            log("No shared data found in UserDefaults for key: \(kUserDefaultsKey)")
             return false
         }
     }
@@ -164,21 +151,23 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
             
             do {
                 let sharedArray = decode(data: json)
-                let sharedMediaFiles: [SharedMediaFile] = sharedArray.compactMap {
-                    guard let path = $0.type == .text || $0.type == .url ? $0.path
-                            : getAbsolutePath(for: $0.path) else {
-                        log("Failed to get absolute path for: \($0.path)")
-                        return nil
+                let sharedMediaFiles: [SharedMediaFile] = sharedArray.compactMap { item -> SharedMediaFile? in
+                    let path: String?
+                    if item.type == .text || item.type == .url {
+                        path = item.path
+                    } else {
+                        path = getAbsolutePath(for: item.path)
                     }
                     
+                    guard let validPath = path else { return nil }
                     
                     return SharedMediaFile(
-                        path: path,
-                        mimeType: $0.mimeType,
-                        thumbnail: getAbsolutePath(for: $0.thumbnail),
-                        duration: $0.duration,
-                        message: message,
-                        type: $0.type
+                        path: validPath,
+                        mimeType: item.mimeType,
+                        thumbnail: getAbsolutePath(for: item.thumbnail),
+                        description: message,
+                        duration: item.duration,
+                        type: item.type
                     )
                 }
                 
@@ -232,19 +221,23 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
         let message = userDefaults?.string(forKey: kUserDefaultsMessageKey)
         if let json = userDefaults?.object(forKey: kUserDefaultsKey) as? Data {
             let sharedArray = decode(data: json)
-            let sharedMediaFiles: [SharedMediaFile] = sharedArray.compactMap {
-                guard let path = $0.type == .text || $0.type == .url ? $0.path
-                        : getAbsolutePath(for: $0.path) else {
-                    return nil
+            let sharedMediaFiles: [SharedMediaFile] = sharedArray.compactMap { item -> SharedMediaFile? in
+                let path: String?
+                if item.type == .text || item.type == .url {
+                    path = item.path
+                } else {
+                    path = getAbsolutePath(for: item.path)
                 }
                 
+                guard let validPath = path else { return nil }
+                
                 return SharedMediaFile(
-                    path: path,
-                    mimeType: $0.mimeType,
-                    thumbnail: getAbsolutePath(for: $0.thumbnail),
-                    duration: $0.duration,
-                    message: message,
-                    type: $0.type
+                    path: validPath,
+                    mimeType: item.mimeType,
+                    thumbnail: getAbsolutePath(for: item.thumbnail),
+                    description: message,
+                    duration: item.duration,
+                    type: item.type
                 )
             }
             latestMedia = sharedMediaFiles
@@ -335,9 +328,10 @@ public class SwiftReceiveSharingIntentPlugin: NSObject, FlutterPlugin, FlutterSt
 public class SharedMediaFile: Codable {
     public var path: String
     public var mimeType: String?
-    public var thumbnail: String? // video thumbnail
+    public var thumbnail: String?
+    public var title: String?
+    public var description: String?
     public var duration: Double? // video duration in milliseconds
-    public var message: String? // post message
     public var type: SharedMediaType
     
     
@@ -345,14 +339,16 @@ public class SharedMediaFile: Codable {
         path: String,
         mimeType: String? = nil,
         thumbnail: String? = nil,
+        title: String?=nil,
+        description: String?=nil,
         duration: Double? = nil,
-        message: String?=nil,
         type: SharedMediaType) {
             self.path = path
             self.mimeType = mimeType
             self.thumbnail = thumbnail
             self.duration = duration
-            self.message = message
+            self.title = title
+            self.description = description
             self.type = type
         }
 }

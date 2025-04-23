@@ -28,9 +28,12 @@ import java.net.URLConnection
 private const val MESSAGES_CHANNEL = "receive_sharing_intent/messages"
 private const val EVENTS_CHANNEL_MEDIA = "receive_sharing_intent/events-media"
 private const val EVENTS_CHANNEL_TEXT = "receive_sharing_intent/events-text"
+private const val SHARED_PREFS_NAME = "my_shared_data"
+private const val SHARED_MEDIA_KEY = "shared_media_key"
+private const val SHARED_MESSAGE_KEY = "shared_message_key"
 
 class ReceiveSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandler,
-        EventChannel.StreamHandler, NewIntentListener {
+    EventChannel.StreamHandler, NewIntentListener {
 
     private var initialMedia: JSONArray? = null
     private var latestMedia: JSONArray? = null
@@ -70,13 +73,53 @@ class ReceiveSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
             "getInitialMedia" -> result.success(initialMedia?.toString())
+            "readMedia" -> {
+                readMedia()
+                result.success(latestMedia?.toString())
+            }
             "reset" -> {
                 initialMedia = null
                 latestMedia = null
+                clearSharedData()
                 result.success(null)
             }
 
             else -> result.notImplemented()
+        }
+    }
+
+    private fun readMedia(): Boolean {
+        try {
+            val sharedPrefs = applicationContext.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)
+            val mediaDataString = sharedPrefs.getString(SHARED_MEDIA_KEY, null)
+
+            if (mediaDataString != null) {
+                // Simply parse the JSON array as is
+                val mediaArray = JSONArray(mediaDataString)
+
+                // Update latest media with the raw array
+                latestMedia = mediaArray
+
+                // Notify event listeners
+                eventSinkMedia?.success(latestMedia?.toString())
+                return true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return false
+    }
+
+    private fun clearSharedData() {
+        try {
+            val sharedPrefs = applicationContext.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)
+            sharedPrefs.edit().apply {
+                remove(SHARED_MEDIA_KEY)
+                remove(SHARED_MESSAGE_KEY)
+                apply()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -97,9 +140,9 @@ class ReceiveSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
             // Opening URL
             intent.action == Intent.ACTION_VIEW -> {
                 val value = JSONArray(
-                        listOf(JSONObject()
-                                .put("path", intent.dataString)
-                                .put("type", MediaType.URL.value))
+                    listOf(JSONObject()
+                        .put("path", intent.dataString)
+                        .put("type", MediaType.URL.value))
                 )
                 if (initial) initialMedia = value
                 latestMedia = value
@@ -142,13 +185,13 @@ class ReceiveSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
         val mType = mimeType ?: path?.let { URLConnection.guessContentTypeFromName(path) }
         val type = MediaType.fromMimeType(mType)
         val (thumbnail, duration) = path?.let { getThumbnailAndDuration(path, type) }
-                ?: Pair(null, null)
+            ?: Pair(null, null)
         return JSONObject()
-                .put("path", path ?: text)
-                .put("type", type.value)
-                .put("mimeType", mType)
-                .put("thumbnail", thumbnail)
-                .put("duration", duration)
+            .put("path", path ?: text)
+            .put("type", type.value)
+            .put("mimeType", mType)
+            .put("thumbnail", thumbnail)
+            .put("duration", duration)
     }
 
     // Get video thumbnail and duration.

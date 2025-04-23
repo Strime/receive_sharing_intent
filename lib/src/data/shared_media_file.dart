@@ -5,8 +5,11 @@ class SharedMediaFile {
   /// NOTE. All files are copied to a temp cache folder
   final String path;
 
-  /// Video thumbnail
   final String? thumbnail;
+
+  final String? title;
+
+  final String? description;
 
   /// Video duration in milliseconds
   final double? duration;
@@ -18,34 +21,34 @@ class SharedMediaFile {
   /// i.e. image/jpeg, video/mp4, text/plain
   final String? mimeType;
 
-  /// Post message iOS ONLY
-  final String? message;
-
   SharedMediaFile({
     required this.path,
     required this.type,
     this.thumbnail,
+    this.title,
+    this.description,
     this.duration,
     this.mimeType,
-    this.message,
   });
 
   SharedMediaFile.fromMap(Map<String, dynamic> json)
       : path = json['path'],
         thumbnail = json['thumbnail'],
+        title = json['title'],
+        description = json['description'],
         duration = json['duration'],
         type = SharedMediaType.fromValue(json['type']),
-        mimeType = json['mimeType'],
-        message = json['message'];
+        mimeType = json['mimeType'];
 
   Map<String, dynamic> toMap() {
     return {
       'path': path,
       'thumbnail': thumbnail,
+      'title': title,
+      'description': description,
       'duration': duration,
       'type': type.value,
       'mimeType': mimeType,
-      'message': message,
     };
   }
 }
